@@ -1,0 +1,57 @@
+---
+    - name: Check for /dev/xvdd1
+      command: lsblk /dev/xvdd1
+      register: xvdd1
+      failed_when: "'command not found' in xvdd1.stdout"
+      changed_when: "xvdd1.rc != 0"
+
+    - name: Check for /dev/xvde1
+      command: lsblk /dev/xvde1
+      register: xvde1
+      failed_when: "'command not found' in xvde1.stdout"
+      changed_when: "xvde1.rc != 0"
+
+    - name: Create /dev/xvdd1
+      command: parted -s -a optimal /dev/xvdd mklabel msdos mkpart primary 0% 100% set 1 raid on
+      when: "xvdd1.rc != 0"
+
+    - name: Create /dev/xvde1
+      command: parted -s -a optimal /dev/xvde mklabel msdos mkpart primary 0% 100% set 1 raid on
+      when: "xvde1.rc != 0"
+
+    - name: check for /dev/md0
+      command: mdadm -D /dev/md0
+      ignore_errors: yes
+      register: mdadm_check
+
+    - name: Create mdadm array
+      shell: echo yes | mdadm --create --verbose /dev/md0 --level=raid1 --raid-devices=2 /dev/xvdd1 /dev/xvde1
+      when: mdadm_check.rc != 0
+
+    # - name: Wait for RAID array to settle
+    #   shell: mdadm --wait /dev/md0
+    #   when: mdadm_check.rc != 0
+
+    - name: Create filesystem
+      filesystem: >
+        fstype=ext4
+        dev=/dev/md0
+        force=no
+
+    - name: Create mountpoint for raid array
+      file: >
+        path=/mnt/cbsraid
+        state=directory
+
+    - name: Mount raid array
+      mount: >
+        name=/mnt/cbsraid
+        src=/dev/md0
+        fstype=ext4
+        state=mounted
+        opts=noatime
+
+    - name: Create directory for mysql data
+      file: >
+        name=/mnt/cbsraid/mysql
+        state=directory

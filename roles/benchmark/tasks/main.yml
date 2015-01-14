@@ -1,0 +1,23 @@
+---
+
+    - name: Increase yum performance
+      yum: >
+        pkg={{ item }}
+        state=present
+      with_items:
+        - deltarpm
+        - yum-plugin-fastestmirror
+
+    - name: Ensure host is up to date
+      yum: >
+        name=*
+        state=latest
+
+    - include: prep_disks.yml
+    - include: prep_mysql.yml
+
+    # - name: Run tests
+    #   shell: cd /usr/share/sql-bench/; perl run-all-tests
+    #   register: bench_output
+
+    # - debug: var=bench_output.stdout

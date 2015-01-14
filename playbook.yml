@@ -1,0 +1,82 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: False
+  vars:
+    pyrax_credentials: ~/.pyrax.testing
+    region: IAD
+    infra_basename: satabench
+    volume_type: SATA
+  tasks:
+
+    - name: Build a new cloud server
+      action:
+        module: rax
+        credentials: "{{ pyrax_credentials }}"
+        name: "{{ infra_basename }}"
+        flavor: general1-8
+        image: bfa5783c-e40e-4668-adc1-feb0ae3d7a46
+        key_name: personal_servers
+        wait: yes
+        region: "{{ region }}"
+        state: present
+        networks:
+          - private
+          - public
+      register: rax
+
+    - name: Add new instance to host group
+      local_action:
+          module: add_host
+          hostname: "{{ item.accessIPv4 }}"
+          groupname: raxhosts
+      with_items: rax.instances
+
+    - name: Create CBS volumes
+      local_action:
+        module: rax_cbs
+        credentials: "{{ pyrax_credentials }}"
+        name: "{{ item }}"
+        description: "{{ item }}"
+        volume_type: "{{ volume_type }}"
+        size: 100
+        region: "{{ region }}"
+        wait: yes
+        state: present
+      with_items:
+        - "{{ infra_basename }}-cbsraid-disk0"
+        - "{{ infra_basename }}-cbsraid-disk1"
+
+    - name: Attach CBS volumes
+      local_action:
+        module: rax_cbs_attachments
+        credentials: "{{ pyrax_credentials }}"
+        volume: "{{ item.name }}"
+        server: "{{ infra_basename }}"
+        device: "{{ item.device }}"
+        region: "{{ region }}"
+        wait: yes
+        state: present
+      with_items:
+        - { name: "{{ infra_basename }}-cbsraid-disk0", device: /dev/xvdd }
+        - { name: "{{ infra_basename }}-cbsraid-disk1", device: /dev/xvde }
+
+- name: Wait for server to come online
+  hosts: raxhosts
+  user: root
+  gather_facts: false
+  tasks:
+
+    - name: Wait for server to come online
+      wait_for: >
+        port=22
+        timeout=300
+
+- name: Configure the host
+  hosts: raxhosts
+  user: root
+  roles:
+    - benchmark
+
+
+

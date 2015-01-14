@@ -1,0 +1,30 @@
+---
+    - name: Install MariaDB
+      yum: >
+        name="{{ item }}"
+        state=present
+      with_items:
+        - mariadb-server
+        - mariadb-bench
+
+    - name: Add my.cnf
+      copy: >
+        src=my.cnf
+        dest=/etc/my.cnf
+      register: mysql_conf
+      notify:
+        restart mariadb
+
+    - name: Run mysql_install_db
+      command: mysql_install_db
+      when: mysql_conf.changed
+
+    - name: Ensure ownership is set properly on MySQL directories
+      command: chown -R mysql:mysql /mnt/cbsraid/mysql/
+      when: mysql_conf.changed
+
+    - name: Configure MariaDB service
+      service: >
+        name=mariadb
+        state=running
+        enabled=yes
